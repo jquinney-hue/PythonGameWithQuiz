@@ -5074,7 +5074,7 @@ async function deleteLobby() {
 
 // ====================== START GAME ======================
 async function startQuizGame() {
-    let finalQuestions = [];
+    questions = []; // FIXED: Using the global variable instead of a local one!
     const checkboxes = document.querySelectorAll('.q-select-checkbox');
 
     // Check if the host actually loaded questions first
@@ -5086,27 +5086,29 @@ async function startQuizGame() {
     // Grab the specific questions the host left checked
     checkboxes.forEach(cb => {
         if (cb.checked) {
-            finalQuestions.push(window._availableQuestions[cb.value]);
+            questions.push(window._availableQuestions[cb.value]);
         }
     });
 
-    if (finalQuestions.length === 0) {
+    if (questions.length === 0) {
         alert("You must select at least one question to start the game!");
         return;
     }
 
-    // Push the manually selected questions to Firebase
+    currentQIdx = 0; // Ensure local index is reset
+
+    // Push to Firebase
     await db.ref(`${PYTHON_QUIZ_ROOT}/lobbies/${lobbyCode}`).update({
         status: 'question',
         currentQuestion: 0,
-        questions: finalQuestions, // Sending their exact selection!
+        questions: questions,
         questionStartedAt: Date.now()
     });
 }
 
 // ====================== JOIN LOBBY WAITING ROOM ======================
 function renderJoinLobby() {
-    const players = Object.values(lobbyData.players || {});
+    const players = Object.values(lobbyData?.players || {})
     const playerList = players.map(p =>
         `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #333">
             <span style="color:#c586c0;font-size:1.3rem">${p.isHost ? '&#x1F451;' : '&#x1F3AE;'}</span>
@@ -5241,7 +5243,7 @@ function refreshLobbyPlayers() {
 function refreshScoreboard() {
     const scoreEl = document.getElementById('quiz-scoreboard');
     if (!scoreEl) return;
-    const players = Object.values(lobbyData.players || {})
+    const players = Object.values(lobbyData?.players || {})
         .sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 8);
     scoreEl.innerHTML = players.map(p => `
         <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #333">
@@ -5262,7 +5264,7 @@ function renderHostGameView() {
             <div style="margin-top:20px;background:#252526;border-radius:12px;padding:15px">
                 <h4 style="color:#aaa">Live Scores</h4>
                 <div id="quiz-scoreboard">
-                ${Object.values(lobbyData.players || {}).sort((a,b) => (b.score||0)-(a.score||0)).slice(0,8).map(p => `
+                ${Object.values(lobbyData?.players || {}).sort((a,b) => (b.score||0)-(a.score||0)).slice(0,8).map(p => `
                     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #333">
                         <span>${p.name}</span><span style="color:#c586c0;font-weight:bold">${p.score||0}</span>
                     </div>`).join('')}
