@@ -4932,6 +4932,85 @@ async function createQuizLobby() {
     renderHostLobbyWithCategory();
 }
 
+// Global array to hold the currently loaded batch of questions
+window._availableQuestions = [];
+
+async function loadQuestionsForSelection() {
+    const container = document.getElementById('question-selection-container');
+    const cat = document.getElementById('category-select').value;
+    
+    container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">Loading JSONs...</div>';
+    window._availableQuestions = [];
+
+    const ranges = {
+        all: [1,52], stage1: [1,6], stage2: [7,12], stage3: [13,18],
+        stage4: [19,24], stage5: [25,28], stage6: [29,42], lists: [43,52]
+    };
+    const [min, max] = ranges[cat] || [1,52];
+
+    for (let lvl = min; lvl <= max; lvl++) {
+        if (!LEVEL_URLS[lvl]) continue;
+        try {
+            const res = await fetch(LEVEL_URLS[lvl]);
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (data.questions) {
+                const levelInputType = data.type || 'text';
+                data.questions.forEach(q => {
+                    if (q.correctCode || q.correct || q.answer || q.html) {
+                        q.levelType = lvl;
+                        q.inputType = q.inputType || levelInputType;
+                        window._availableQuestions.push(q);
+                    }
+                });
+            }
+        } catch(e) {}
+    }
+
+    if (window._availableQuestions.length === 0) {
+        container.innerHTML = '<div style="color:#f44336;padding:10px;">No questions found for this category.</div>';
+        return;
+    }
+
+    // Render the checklist UI
+    container.innerHTML = `
+        <div style="background:#1e1e1e;padding:10px;border-radius:6px;border:1px solid #333;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #333;">
+                <div>
+                    <button onclick="toggleAllQuestions(true)" style="background:#333;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;margin-right:5px;">Select All</button>
+                    <button onclick="toggleAllQuestions(false)" style="background:#333;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Deselect All</button>
+                </div>
+                <span id="selected-q-count" style="color:#569cd6;font-weight:bold;">${window._availableQuestions.length} Selected</span>
+            </div>
+            <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;">
+                ${window._availableQuestions.map((q, i) => {
+                    // Clean up the text for preview so HTML tags don't ruin the list
+                    let previewText = (q.html || q.correctCode || q.correct || q.answer || "No text").replace(/<[^>]+>/g, '');
+                    if (previewText.length > 55) previewText = previewText.substring(0, 55) + '...';
+                    
+                    return `
+                    <label style="display:flex;align-items:center;padding:8px;background:#252526;border-radius:4px;cursor:pointer;">
+                        <input type="checkbox" class="q-select-checkbox" value="${i}" checked onchange="updateQCount()" style="margin-right:10px;width:16px;height:16px;">
+                        <span style="color:#c586c0;margin-right:8px;font-family:monospace;font-size:0.9rem;">[Lvl ${q.levelType}]</span>
+                        <span style="color:#d4d4d4;font-size:0.9rem;font-family:monospace;">${previewText}</span>
+                    </label>`;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function toggleAllQuestions(check) {
+    document.querySelectorAll('.q-select-checkbox').forEach(cb => cb.checked = check);
+    updateQCount();
+}
+
+function updateQCount() {
+    const checked = document.querySelectorAll('.q-select-checkbox:checked').length;
+    const countEl = document.getElementById('selected-q-count');
+    if (countEl) countEl.innerText = `${checked} Selected`;
+}
+
 function renderHostLobbyWithCategory() {
     // EARLY EXIT: If the UI is already built, just update the players and stop!
     // This prevents the host's dropdown selection from resetting every time someone joins.
@@ -4949,18 +5028,25 @@ function renderHostLobbyWithCategory() {
             </div>
             
             <div style="margin:15px 0">
-                <label style="color:#aaa">Select Questions:</label>
-                <select id="category-select" style="width:100%;padding:10px;background:#1e1e1e;color:#fff;border-radius:6px;border:1px solid #333;">
-                    <option value="all">All Levels</option>
-                    <option value="stage1">Stage 1</option>
-                    <option value="stage2">Stage 2</option>
-                    <option value="stage3">Stage 3</option>
-                    <option value="stage4">Stage 4</option>
-                    <option value="stage5">Stage 5</option>
-                    <option value="stage6">Stage 6 (Loops)</option>
-                    <option value="lists">Lists (GCSE)</option>
-                </select>
+                <label style="color:#aaa;display:block;margin-bottom:8px;">1. Select a Category & Load Questions:</label>
+                <div style="display:flex; gap:10px;">
+                    <select id="category-select" style="flex:1;padding:10px;background:#1e1e1e;color:#fff;border-radius:6px;border:1px solid #333">
+                        <option value="all">All Levels</option>
+                        <option value="stage1">Stage 1</option>
+                        <option value="stage2">Stage 2</option>
+                        <option value="stage3">Stage 3</option>
+                        <option value="stage4">Stage 4</option>
+                        <option value="stage5">Stage 5</option>
+                        <option value="stage6">Stage 6 (Loops)</option>
+                        <option value="lists">Lists (GCSE)</option>
+                    </select>
+                    <button onclick="loadQuestionsForSelection()" style="background:#569cd6;color:#fff;border:none;padding:0 20px;border-radius:6px;cursor:pointer;font-weight:bold;">
+                        Load
+                    </button>
+                </div>
             </div>
+
+            <div id="question-selection-container" style="margin-bottom:20px;"></div>
 
             <div style="margin:20px 0;background:#1e1e1e;padding:15px;border-radius:8px;">
                 <h3 style="margin-top:0;font-size:1rem;color:#aaa">Players in Lobby (<span id="lobby-player-count">0</span>)</h3>
@@ -4988,45 +5074,32 @@ async function deleteLobby() {
 
 // ====================== START GAME ======================
 async function startQuizGame() {
-    questions = [];
-    const cat = document.getElementById('category-select') ? document.getElementById('category-select').value : 'all';
+    let finalQuestions = [];
+    const checkboxes = document.querySelectorAll('.q-select-checkbox');
 
-    const ranges = {
-        all: [1,52], stage1: [1,6], stage2: [7,12], stage3: [13,18],
-        stage4: [19,24], stage5: [25,28], stage6: [29,42], lists: [43,52]
-    };
-
-    const [min, max] = ranges[cat] || [1,52];
-
-    for (let lvl = min; lvl <= max; lvl++) {
-        if (!LEVEL_URLS[lvl]) continue;
-        try {
-            const res = await fetch(LEVEL_URLS[lvl]);
-            if (!res.ok) continue;
-            const data = await res.json();
-            if (data.questions) {
-                const levelInputType = data.type || 'text';
-                data.questions.forEach(q => {
-                    if (q.correctCode || q.correct || q.answer || q.html) {
-                        q.levelType = lvl;
-                        q.inputType = q.inputType || levelInputType;
-                        questions.push(q);
-                    }
-                });
-            }
-        } catch(e) {}
+    // Check if the host actually loaded questions first
+    if (checkboxes.length === 0) {
+        alert("Please load and select questions before starting the quiz!");
+        return;
     }
 
-    questions = questions.sort(() => Math.random() - 0.5).slice(0, 15);
+    // Grab the specific questions the host left checked
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            finalQuestions.push(window._availableQuestions[cb.value]);
+        }
+    });
 
-    if (questions.length === 0) {
-        questions = [{ html: "<p style='color:#f44336;text-align:center'>No questions found.<br>Try another category.</p>", correctCode: "pass" }];
+    if (finalQuestions.length === 0) {
+        alert("You must select at least one question to start the game!");
+        return;
     }
 
+    // Push the manually selected questions to Firebase
     await db.ref(`${PYTHON_QUIZ_ROOT}/lobbies/${lobbyCode}`).update({
         status: 'question',
         currentQuestion: 0,
-        questions: questions,
+        questions: finalQuestions, // Sending their exact selection!
         questionStartedAt: Date.now()
     });
 }
